@@ -84,6 +84,77 @@ void Micron::decodeSonarBeam(base::samples::SonarBeam &sonar_beam)
     }
 }
 
+void Micron::decodeSonarBeam(base::samples::Sonar &sonar_beam)
+{
+    LOG_DEBUG_S <<"decoding SonarBeam" ;
+    if(sea_net_packet.getSenderType() != IMAGINGSONAR)
+        throw std::runtime_error("Micron::getSonarBeam: Wrong device type");
+
+    ImagingHeadData data;
+    sea_net_packet.decodeHeadData(data);
+
+    //check if the configuration is ok
+    //be careful some values cannot be configured for the micron dst like SCANRIGHT (always == 1)
+    //some other values are dynamically by the device like MOTOFF
+    if( head_config.left_limit != data.left_limit ||
+        head_config.right_limit != data.right_limit ||
+        head_config.motor_step_angle_size != data.motor_step_angle_size ||
+        head_config.ad_low != data.ad_low ||
+        head_config.ad_span != data.ad_span ||
+        (head_config.head_control &(CONT|ADC8ON|INVERT)) !=(data.head_control &(CONT|ADC8ON|INVERT)))
+    {
+        LOG_ERROR_S << "Configuration of the beam differs from the desired one." ;
+        LOG_ERROR_S << "left_limit " << head_config.left_limit << " / " << data.left_limit ;
+        LOG_ERROR_S << "rigth_limit " << head_config.right_limit << " / " << data.right_limit ;
+        LOG_ERROR_S << "angle size " << head_config.motor_step_angle_size << " / " << data.motor_step_angle_size ;
+        LOG_ERROR_S << "ad low " << head_config.ad_low << " / " << data.ad_low ;
+        LOG_ERROR_S << "ad span " << head_config.ad_span << " / " << data.ad_span ;
+        LOG_ERROR_S << "head_control " << head_config.head_control << " / " << data.head_control ;
+        throw std::runtime_error("Configuration of the beam differs from the desired one.");
+    }
+
+    //copy data into Sonar
+    sonar_beam.time = base::Time::now();
+    sonar_beam.speed_of_sound = speed_of_sound;
+    sonar_beam.beam_width = base::Angle::fromDeg(3.0);
+    sonar_beam.beam_height = base::Angle::fromDeg(35.0);
+
+    double sampling_interval = ((640.0 * data.ad_interval) * 1e-9);
+    sonar_beam.bin_duration = base::Time::fromSeconds(sampling_interval / 2.0);
+
+    //the micron dst is not using the lockout_time value
+    //therefore we are removing the values here
+    //lockout_time is in microseconds and sampling_interval in sec
+    size_t lockouts = head_config.lockout_time / (10e6 * sampling_interval);
+    LOG_DEBUG_S << "Erasing " << lockouts<< " bins because of lockout_time." ;
+    if((data.head_control & ADC8ON) == 1)
+    {
+        sonar_beam.bins.resize(data.data_bytes,0);
+        memcpy(&sonar_beam.bins[0]+lockouts, data.scan_data+lockouts, data.data_bytes-lockouts);
+    }
+    else
+    {
+        //low resolution is used
+        //this means each bin has 4 Bits instead of 8 Bits
+        //scale it up to values between 0 and 255
+        sonar_beam.bins.resize(lockouts,0);
+
+        std::vector<uint8_t> old_beam;
+        for(int i=lockouts;i<data.data_bytes;++i)
+        {
+            old_beam.push_back((data.scan_data[i]&0x0F)*17);
+            old_beam.push_back((data.scan_data[i] >> 4)*17);
+        }
+        sonar_beam.bin_count = old_beam.size();
+        std::vector<float> bins;
+        bins.resize(sonar_beam.bin_count);
+        for (unsigned int i = 0; i < sonar_beam.bin_count; ++i)
+            bins[i] = static_cast<float>(old_beam[i] * 1.0 / 255);
+        base::Angle bearing = base::Angle::fromRad(-(data.bearing/6399.0*2.0*M_PI)+M_PI);
+        sonar_beam.pushBeam(bins, bearing);
+    }
+}
+
 void Micron::configure(const MicronConfig &config,uint32_t timeout)
 {
     //some conversions
