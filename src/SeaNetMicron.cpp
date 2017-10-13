@@ -1,5 +1,6 @@
 #include "SeaNetMicron.hpp"
 #include "SeaNetTypesInternal.hpp"
+#include "Exceptions.hpp"
 #include <iodrivers_base/Timeout.hpp>
 #include <iostream>
 #include <base-logging/Logging.hpp>
@@ -16,10 +17,10 @@ enum HeadConfigFlags
 };
 
 Micron::Micron(): SeaNet(IMAGINGSONAR)
-{ 
+{
 }
 
-Micron::~Micron() 
+Micron::~Micron()
 {
 }
 
@@ -35,25 +36,25 @@ void Micron::decodeSonar(base::samples::Sonar &sonar)
     // If the transducer head bearing is getting confused about its position, the sonar image will be rotated.
     // This is noticed by MOTERR flag. In this case, throw this exception.
     if (((data.head_status >> 1) & 1))
-        throw std::runtime_error("Motor head lost synchronization.");
+        throw MotorLostSyncException("Motor head lost synchronization.");
 
     //check if the configuration is ok
     //be careful some values cannot be configured for the micron dst like SCANRIGHT (always == 1)
     //some other values are dynamically by the device like MOTOFF
     if( head_config.left_limit != data.left_limit ||
         head_config.right_limit != data.right_limit ||
-        head_config.motor_step_angle_size != data.motor_step_angle_size || 
-        head_config.ad_low != data.ad_low || 
+        head_config.motor_step_angle_size != data.motor_step_angle_size ||
+        head_config.ad_low != data.ad_low ||
         head_config.ad_span != data.ad_span ||
         (head_config.head_control &(CONT|ADC8ON|INVERT)) !=(data.head_control &(CONT|ADC8ON|INVERT)))
     {
         LOG_ERROR_S << "Configuration of the beam differs from the desired one." ;
-        LOG_ERROR_S << "left_limit " << head_config.left_limit << " / " << data.left_limit ; 
-        LOG_ERROR_S << "rigth_limit " << head_config.right_limit << " / " << data.right_limit ; 
-        LOG_ERROR_S << "angle size " << head_config.motor_step_angle_size << " / " << data.motor_step_angle_size ; 
-        LOG_ERROR_S << "ad low " << head_config.ad_low << " / " << data.ad_low ; 
-        LOG_ERROR_S << "ad span " << head_config.ad_span << " / " << data.ad_span ; 
-        LOG_ERROR_S << "head_control " << head_config.head_control << " / " << data.head_control ; 
+        LOG_ERROR_S << "left_limit " << head_config.left_limit << " / " << data.left_limit ;
+        LOG_ERROR_S << "rigth_limit " << head_config.right_limit << " / " << data.right_limit ;
+        LOG_ERROR_S << "angle size " << head_config.motor_step_angle_size << " / " << data.motor_step_angle_size ;
+        LOG_ERROR_S << "ad low " << head_config.ad_low << " / " << data.ad_low ;
+        LOG_ERROR_S << "ad span " << head_config.ad_span << " / " << data.ad_span ;
+        LOG_ERROR_S << "head_control " << head_config.head_control << " / " << data.head_control ;
         throw std::runtime_error("Configuration of the beam differs from the desired one.");
     }
 
@@ -64,7 +65,7 @@ void Micron::decodeSonar(base::samples::Sonar &sonar)
     sonar.beam_width = base::Angle::fromDeg(3.0);
 
     //the micron dst is not using the lockout_time value
-    //therefore we are removing the values here 
+    //therefore we are removing the values here
     //lockout_time is in microseconds and sampling_interval in sec
     double sampling_interval = 640.0 * data.ad_interval * 1e-9;
     sonar.bin_duration = base::Time::fromSeconds(sampling_interval * 0.5);
@@ -133,7 +134,7 @@ void Micron::configure(const MicronConfig &config,uint32_t timeout)
     //generate head data
     head_config.V3B_params = 0x1D;
     head_config.head_type = IMAGINGSONAR;
-    head_config.left_limit   =left_limit; 
+    head_config.left_limit   =left_limit;
     head_config.right_limit  =right_limit;
     head_config.ad_span = 81;
     head_config.ad_low = 8;
@@ -147,7 +148,7 @@ void Micron::configure(const MicronConfig &config,uint32_t timeout)
     head_config.lockout_time = 100;
     head_config.minor_axis_dir = (0x40) | (0x06<<8);
     head_config.major_axis_pan = (0x01);
-    head_config.lockout_time = lockout_time; 
+    head_config.lockout_time = lockout_time;
     // Range scale does not control the sonar, only provides a way to note the current settings in a human readable
     // format. The lower 14 bits are the range scale * 10 units and the higher 2 bits are coded units:
     // 0: meters
@@ -160,7 +161,7 @@ void Micron::configure(const MicronConfig &config,uint32_t timeout)
     //SCANRIGHT is always 1 for microns dst even if the flag is not set
     head_config.head_control =
         (((!config.low_resolution)?ADC8ON:0)|(config.continous?CONT:0)|RAW|HASMOT|REPLYASL|CHAN2|(config.invert?INVERT:0));
-    
+
     writeHeadCommand(head_config,timeout);
 }
 
@@ -169,7 +170,7 @@ void Micron::decodeEchoSounder(base::samples::RigidBodyState &state)
     LOG_DEBUG_S <<"decoding EchoSounder" ;
     if(sea_net_packet.getSenderType() != IMAGINGSONAR)
         throw std::runtime_error("Micron::getSonarBeam: Wrong device type");
-    
+
     state.invalidate();
     std::vector<uint8_t> data;
     sea_net_packet.decodeAuxData(data);
@@ -185,5 +186,3 @@ void Micron::decodeEchoSounder(base::samples::RigidBodyState &state)
     else
         throw std::runtime_error("Cannot decode EchoSounder. Depth was not find in the package");
 }
-
-

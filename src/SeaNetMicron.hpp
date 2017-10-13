@@ -1,5 +1,5 @@
 #ifndef _SEANETMICRON_H_
-#define _SEANETMICRON_H_ 
+#define _SEANETMICRON_H_
 
 #include "SeaNet.hpp"
 #include "SeaNetTypesInternal.hpp"
@@ -8,7 +8,7 @@
 #include <base/samples/RigidBodyState.hpp>
 
 namespace sea_net
-{ 
+{
     struct HeadConfigPacket;
 
     class Micron : public SeaNet
@@ -27,4 +27,3 @@ namespace sea_net
 };
 
 #endif
-

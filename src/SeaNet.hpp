@@ -1,5 +1,5 @@
 #ifndef _SEANET_H_
-#define _SEANET_H_ 
+#define _SEANET_H_
 
 #include <iodrivers_base/Driver.hpp>
 #include "SeaNetTypes.hpp"
@@ -13,10 +13,10 @@ class SeaNet : public ::iodrivers_base::Driver
 {
 public:
         /** Base class for RS232 SeaNet devices
-         *  The class has to be initialized with 
+         *  The class has to be initialized with
          *  the right device type which is used
          *  as communictaion check
-         */ 
+         */
 	SeaNet(const DeviceType type);
 	~SeaNet();
 
@@ -31,7 +31,7 @@ public:
         /** Overloaded from iodrivers_base::Driver */
         void clear();
 
-        /** Reboots the Device and waits for a mtAlive package 
+        /** Reboots the Device and waits for a mtAlive package
          *  be careful this takes a while and even if you receive mtAlives
          *  the device my be in a state where it does not accept mtHeadCommands */
         void reboot(int timeout);
@@ -48,9 +48,9 @@ public:
 
         void waitForPacket(PacketType type, int timeout);
 
-        /** extracts the software version of the device from a mtVersionData package 
+        /** extracts the software version of the device from a mtVersionData package
          *
-         *  call this function if readPacket returns mtVersionData */  
+         *  call this function if readPacket returns mtVersionData */
         void getVersion(VersionData &version, int timeout);
 
         /** Returns if the remote device is configured as full duplex or half
@@ -60,7 +60,7 @@ public:
 
         /** @deprecated use isFullDuplex instead */
         bool isFullDublex(int timeout);
-        
+
         void setWriteTimeout(uint32_t timeout);
 
         /** Returns the structure holding the last received packet */
@@ -100,4 +100,3 @@ protected:
         bool has_pending_data;
 }; };
 #endif
-
